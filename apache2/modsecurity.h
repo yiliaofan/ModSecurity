@@ -185,6 +185,7 @@ extern DSOLOCAL int *unicode_map_table;
 #define HASH_DISABLED             0
 #define HASH_ENABLED              1
 
+// FIXME: enum should be used instead of a define.
 #define HASH_URL_HREF_HASH_RX     0
 #define HASH_URL_HREF_HASH_PM     1
 #define HASH_URL_FACTION_HASH_RX  2
@@ -195,6 +196,8 @@ extern DSOLOCAL int *unicode_map_table;
 #define HASH_URL_IFRAMESRC_HASH_PM 7
 #define HASH_URL_FRAMESRC_HASH_RX 8
 #define HASH_URL_FRAMESRC_HASH_PM 9
+#define HASH_URL_COOKIE_RX 	  10
+#define HASH_URL_COOKIE_PM 	  11
 
 #define HASH_KEYONLY              0
 #define HASH_SESSIONID            1
@@ -592,11 +595,13 @@ struct directory_config {
     int                 crypto_hash_location_rx;
     int                 crypto_hash_iframesrc_rx;
     int                 crypto_hash_framesrc_rx;
+    int                 crypto_hash_cookie_rx;
     int                 crypto_hash_href_pm;
     int                 crypto_hash_faction_pm;
     int                 crypto_hash_location_pm;
     int                 crypto_hash_iframesrc_pm;
     int                 crypto_hash_framesrc_pm;
+    int                 crypto_hash_cookie_pm;
 
     /* xml */
     int                 xml_external_entity;

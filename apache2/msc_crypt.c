@@ -592,6 +592,8 @@ int do_hash_method(modsec_rec *msr, char *link, int type)   {
                         }
                     }
                     break;
+                case HASH_URL_COOKIE_PM:
+                    break;
                 case HASH_URL_FRAMESRC_HASH_RX:
                     if(em[i]->type == HASH_URL_FRAMESRC_HASH_RX)   {
                         rc = msc_regexec_capture(em[i]->param_data, link, strlen(link), ovector, 30, &my_error_msg);
@@ -628,6 +630,8 @@ int do_hash_method(modsec_rec *msr, char *link, int type)   {
                             return 1;
                         }
                     }
+                    break;
+                case HASH_URL_COOKIE_RX:
                     break;
             }
         }

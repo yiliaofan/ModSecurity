@@ -149,11 +149,13 @@ void *create_directory_config(apr_pool_t *mp, char *path)
     dcfg->crypto_hash_location_rx = NOT_SET;
     dcfg->crypto_hash_iframesrc_rx = NOT_SET;
     dcfg->crypto_hash_framesrc_rx = NOT_SET;
+    dcfg->crypto_hash_cookie_rx = NOT_SET;
     dcfg->crypto_hash_href_pm = NOT_SET;
     dcfg->crypto_hash_faction_pm = NOT_SET;
     dcfg->crypto_hash_location_pm = NOT_SET;
     dcfg->crypto_hash_iframesrc_pm = NOT_SET;
     dcfg->crypto_hash_framesrc_pm = NOT_SET;
+    dcfg->crypto_hash_cookie_pm = NOT_SET;
 
 
     /* xml external entity */
@@ -583,6 +585,8 @@ void *merge_directory_configs(apr_pool_t *mp, void *_parent, void *_child)
         ? parent->crypto_hash_iframesrc_rx : child->crypto_hash_iframesrc_rx);
     merged->crypto_hash_framesrc_rx = (child->crypto_hash_framesrc_rx == NOT_SET
         ? parent->crypto_hash_framesrc_rx : child->crypto_hash_framesrc_rx);
+    merged->crypto_hash_cookie_rx = (child->crypto_hash_cookie_rx == NOT_SET
+        ? parent->crypto_hash_cookie_rx : child->crypto_hash_cookie_rx);
     merged->crypto_hash_href_pm = (child->crypto_hash_href_pm == NOT_SET
         ? parent->crypto_hash_href_pm : child->crypto_hash_href_pm);
     merged->crypto_hash_faction_pm = (child->crypto_hash_faction_pm == NOT_SET
@@ -593,6 +597,9 @@ void *merge_directory_configs(apr_pool_t *mp, void *_parent, void *_child)
         ? parent->crypto_hash_iframesrc_pm : child->crypto_hash_iframesrc_pm);
     merged->crypto_hash_framesrc_pm = (child->crypto_hash_framesrc_pm == NOT_SET
         ? parent->crypto_hash_framesrc_pm : child->crypto_hash_framesrc_pm);
+    merged->crypto_hash_cookie_pm = (child->crypto_hash_cookie_pm == NOT_SET
+        ? parent->crypto_hash_cookie_pm : child->crypto_hash_cookie_pm);
+
 
     /* xml external entity */
     merged->xml_external_entity = (child->xml_external_entity == NOT_SET
@@ -712,11 +719,13 @@ void init_directory_config(directory_config *dcfg)
     if (dcfg->crypto_hash_location_rx == NOT_SET) dcfg->crypto_hash_location_rx = 0;
     if (dcfg->crypto_hash_iframesrc_rx == NOT_SET) dcfg->crypto_hash_iframesrc_rx = 0;
     if (dcfg->crypto_hash_framesrc_rx == NOT_SET) dcfg->crypto_hash_framesrc_rx = 0;
+    if (dcfg->crypto_hash_cookie_rx == NOT_SET) dcfg->crypto_hash_cookie_rx = 0;
     if (dcfg->crypto_hash_href_pm == NOT_SET) dcfg->crypto_hash_href_pm = 0;
     if (dcfg->crypto_hash_faction_pm == NOT_SET) dcfg->crypto_hash_faction_pm = 0;
     if (dcfg->crypto_hash_location_pm == NOT_SET) dcfg->crypto_hash_location_pm = 0;
     if (dcfg->crypto_hash_iframesrc_pm == NOT_SET) dcfg->crypto_hash_iframesrc_pm = 0;
     if (dcfg->crypto_hash_framesrc_pm == NOT_SET) dcfg->crypto_hash_framesrc_pm = 0;
+    if (dcfg->crypto_hash_cookie_pm == NOT_SET) dcfg->crypto_hash_cookie_pm = 0;
 
     /* xml external entity */
     if (dcfg->xml_external_entity == NOT_SET) dcfg->xml_external_entity = 0;
@@ -2498,6 +2507,16 @@ static const char *cmd_hash_method_pm(cmd_parms *cmd, void *_dcfg,
         }
         dcfg->crypto_hash_framesrc_pm = 1;
     }
+    else if (strcasecmp(p1, "HashCookie") == 0) {
+        re->type = HASH_URL_COOKIE_PM;
+        re->param = _p2;
+        re->param_data = (void *)p;
+        if (re->param_data == NULL) {
+            return apr_psprintf(cmd->pool, "ModSecurity: Invalid pattern: %s", p2);
+        }
+        dcfg->crypto_hash_framesrc_pm = 1;
+    }
+
 
     *(hash_method **)apr_array_push(dcfg->hash_method) = re;
 
@@ -2568,6 +2587,16 @@ static const char *cmd_hash_method_rx(cmd_parms *cmd, void *_dcfg,
         }
         dcfg->crypto_hash_framesrc_rx = 1;
     }
+    else if (strcasecmp(p1, "HashCookie") == 0) {
+        re->type = HASH_URL_COOKIE_RX;
+        re->param = _p2;
+        re->param_data = msc_pregcomp(cmd->pool, p2, 0, NULL, NULL);
+        if (re->param_data == NULL) {
+            return apr_psprintf(cmd->pool, "ModSecurity: Invalid regular expression: %s", p2);
+        }
+        dcfg->crypto_hash_cookie_rx = 1;
+    }
+
 
     *(hash_method **)apr_array_push(dcfg->hash_method) = re;
 

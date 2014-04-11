@@ -122,6 +122,8 @@ static apr_table_t *collection_retrieve_ex(apr_sdbm_t *existing_dbm, modsec_rec 
         rc = apr_sdbm_open(&dbm, dbm_filename, APR_READ | APR_SHARELOCK,
             CREATEMODE, msr->mp);
         if (rc != APR_SUCCESS) {
+            msr_log(msr, 1, "collection_retrieve_ex: Failed to access DBM file \"%s\": %s",
+                    log_escape(msr->mp, dbm_filename), get_apr_error(msr->mp, rc));
             dbm = NULL;
             goto cleanup;
         }

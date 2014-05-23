@@ -12,6 +12,9 @@
 * directly using the email address security@modsecurity.org.
 */
 
+
+#define TESTING_WINDOWS_MLOGC
+
 #include <limits.h>
 
 #include "modsecurity.h"
@@ -25,6 +28,11 @@
 #if defined(WITH_LUA)
 #include "msc_lua.h"
 #endif
+
+
+const char extern *ap_server_root;
+
+
 
 
 /* -- Directory context creation and initialisation -- */
@@ -1173,6 +1181,212 @@ static const char *cmd_audit_engine(cmd_parms *cmd, void *_dcfg, const char *p1)
 
     return NULL;
 }
+#ifdef TESTING_WINDOWS_MLOGC
+static void close_handle_in_child(apr_pool_t *p, apr_file_t *f)
+{
+#ifndef WIN32
+	read_handle_t *new_handle;
+
+	new_handle = apr_pcalloc(p, sizeof(read_handle_t));
+	new_handle->next = read_handles;
+	new_handle->handle = f;
+	read_handles = new_handle;
+#endif
+}
+struct piped_log {
+	/** The pool to use for the piped log */
+	apr_pool_t *p;
+	/** The pipe between the server and the logging process */
+	apr_file_t *read_fd, *write_fd;
+#ifdef AP_HAVE_RELIABLE_PIPED_LOGS
+	/** The name of the program the logging process is running */
+	char *program;
+	/** The pid of the logging process */
+	apr_proc_t *pid;
+	/** How to reinvoke program when it must be replaced */
+	apr_cmdtype_e cmdtype;
+#endif
+};
+static apr_status_t modsec_piped_log_cleanup_for_exec(void *data)
+{
+	piped_log *pl = data;
+
+	apr_file_close(pl->read_fd);
+	apr_file_close(pl->write_fd);
+	return APR_SUCCESS;
+}
+static apr_status_t modsec_piped_log_cleanup(void *data)
+{
+	piped_log *pl = data;
+
+	if (pl->pid != NULL) {
+		apr_proc_kill(pl->pid, SIGTERM);
+	}
+	return modsec_piped_log_cleanup_for_exec(data);
+}
+static void log_child_errfn(apr_pool_t *pool, apr_status_t err,
+	const char *description)
+{
+	ap_log_error(APLOG_MARK, APLOG_ERR, err, NULL, APLOGNO(00088)
+		"%s", description);
+}
+static void piped_log_maintenance(int reason, void *data, apr_wait_t status)
+{
+	piped_log *pl = data;
+	apr_status_t rv;
+	int mpm_state;
+
+	switch (reason) {
+	case APR_OC_REASON_DEATH:
+	case APR_OC_REASON_LOST:
+		pl->pid = NULL; /* in case we don't get it going again, this
+						* tells other logic not to try to kill it
+						*/
+		apr_proc_other_child_unregister(pl);
+		rv = ap_mpm_query(13, &mpm_state);
+		if (rv != APR_SUCCESS) {
+			ap_log_error(APLOG_MARK, APLOG_STARTUP, 0, NULL, APLOGNO(00105)
+				"can't query MPM state; not restarting "
+				"piped log program '%s'",
+				pl->program);
+		}
+		else if (mpm_state != 2) {
+			ap_log_error(APLOG_MARK, APLOG_STARTUP, 0, NULL, APLOGNO(00106)
+				"piped log program '%s' failed unexpectedly",
+				pl->program);
+			if ((rv = piped_log_spawn(pl)) != APR_SUCCESS) {
+				/* what can we do?  This could be the error log we're having
+				* problems opening up... */
+				ap_log_error(APLOG_MARK, APLOG_STARTUP, rv, NULL, APLOGNO(00107)
+					"piped_log_maintenance: unable to respawn '%s'",
+					pl->program);
+			}
+		}
+		break;
+
+	case APR_OC_REASON_UNWRITABLE:
+		/* We should not kill off the pipe here, since it may only be full.
+		* If it really is locked, we should kill it off manually. */
+		break;
+
+	case APR_OC_REASON_RESTART:
+		if (pl->pid != NULL) {
+			apr_proc_kill(pl->pid, SIGTERM);
+			pl->pid = NULL;
+		}
+		break;
+
+	case APR_OC_REASON_UNREGISTER:
+		break;
+	}
+}
+
+static apr_status_t piped_log_spawn(piped_log *pl)
+{
+	apr_procattr_t *procattr;
+	apr_proc_t *procnew = NULL;
+	apr_status_t status;
+
+	if (((status = apr_procattr_create(&procattr, pl->p)) != APR_SUCCESS) ||
+		((status = apr_procattr_dir_set(procattr, NULL))
+		!= APR_SUCCESS) ||
+		((status = apr_procattr_cmdtype_set(procattr, pl->cmdtype))
+		!= APR_SUCCESS) ||
+		((status = apr_procattr_child_in_set(procattr,
+		pl->read_fd,
+		pl->write_fd))
+		!= APR_SUCCESS) ||
+		((status = apr_procattr_child_errfn_set(procattr, log_child_errfn))
+		!= APR_SUCCESS) ||
+		((status = apr_procattr_error_check_set(procattr, 1)) != APR_SUCCESS)) {
+		/* Something bad happened, give up and go away. */
+
+		ap_log_error(APLOG_MARK, APLOG_STARTUP, status, NULL, APLOGNO(00103)
+			"piped_log_spawn: unable to setup child process '%s'",
+			pl->program);
+	}
+	else {
+		char **args;
+		const char *pname;
+
+		apr_tokenize_to_argv(pl->program, &args, pl->p);
+		pname = apr_pstrdup(pl->p, args[0]);
+		procnew = apr_pcalloc(pl->p, sizeof(apr_proc_t));
+		status = apr_proc_create(procnew, pname, (const char * const *)args,
+			NULL, procattr, pl->p);
+
+		if (status == APR_SUCCESS) {
+			pl->pid = procnew;
+			/* procnew->in was dup2'd from pl->write_fd;
+			* since the original fd is still valid, close the copy to
+			* avoid a leak. */
+			apr_file_close(procnew->in);
+			procnew->in = NULL;
+			apr_proc_other_child_register(procnew, piped_log_maintenance, pl,
+				pl->write_fd, pl->p);
+			close_handle_in_child(pl->p, pl->read_fd);
+		}
+		else {
+			/* Something bad happened, give up and go away. */
+			ap_log_error(APLOG_MARK, APLOG_STARTUP, status, NULL, APLOGNO(00104)
+				"unable to start piped log program '%s' |%d|",
+				pl->program, APR_TO_OS_ERROR(status));			
+		}
+	}
+
+	return status;
+}
+
+piped_log *modsec_win_open_piped_log_ex(apr_pool_t *p,
+	const char *program,
+	apr_cmdtype_e cmdtype)
+{
+	piped_log *pl;
+		
+	pl = apr_palloc(p, sizeof (*pl));
+	pl->p = p;
+	pl->program = apr_pstrdup(p, program);
+	pl->pid = NULL;
+	pl->cmdtype = cmdtype;
+
+	if (apr_file_pipe_create_ex(&pl->read_fd,
+		&pl->write_fd,
+		APR_FULL_BLOCK, p) != APR_SUCCESS) {
+
+		return NULL;
+	}
+	apr_pool_cleanup_register(p, pl, modsec_piped_log_cleanup,
+		modsec_piped_log_cleanup_for_exec);
+
+	if (piped_log_spawn(pl) != APR_SUCCESS) {
+		apr_pool_cleanup_kill(p, pl, modsec_piped_log_cleanup);
+		apr_file_close(pl->read_fd);
+		apr_file_close(pl->write_fd);
+		return NULL;
+	}
+
+	return pl;
+}
+
+piped_log *modsec_win_open_piped_log(apr_pool_t *p,
+	const char *program)
+{
+	apr_cmdtype_e cmdtype = APR_PROGRAM_ENV;
+
+	/* In 2.4 favor PROGRAM_ENV, accept "||prog" syntax for compatibility
+	* and "|$cmd" to override the default.
+	* Any 2.2 backport would continue to favor SHELLCMD_ENV so there
+	* accept "||prog" to override, and "|$cmd" to ease conversion.
+	*/
+	if (*program == '|')
+		++program;
+	if (*program == '$') {
+		cmdtype = APR_SHELLCMD_ENV;
+		++program;
+	}
+	return modsec_win_open_piped_log_ex(p, program, cmdtype);
+}
+#endif /* TESTING_WINDOWS_MLOGC */
 
 static const char *cmd_audit_log(cmd_parms *cmd, void *_dcfg, const char *p1)
 {
@@ -1183,11 +1397,15 @@ static const char *cmd_audit_log(cmd_parms *cmd, void *_dcfg, const char *p1)
     if (dcfg->auditlog_name[0] == '|') {
         const char *pipe_name = dcfg->auditlog_name + 1;
         piped_log *pipe_log;
+#ifdef TESTING_WINDOWS_MLOGC
+		pipe_log = modsec_win_open_piped_log(cmd->pool, pipe_name);
+#else
+		pipe_log = ap_open_piped_log(cmd->pool, pipe_name);
+#endif /* TESTING_WINDOWS_MLOGC */
 
-        pipe_log = ap_open_piped_log(cmd->pool, pipe_name);
         if (pipe_log == NULL) {
-            return apr_psprintf(cmd->pool, "ModSecurity: Failed to open the audit log pipe: %s",
-                    pipe_name);
+            return apr_psprintf(cmd->pool, "ModSecurity: Failed to open the audit log pipe: %s/%s",
+				pipe_name, ap_server_root);
         }
         dcfg->auditlog_fd = ap_piped_log_write_fd(pipe_log);
     }

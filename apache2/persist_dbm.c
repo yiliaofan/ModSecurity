@@ -160,6 +160,7 @@ static apr_table_t *collection_retrieve_ex(apr_sdbm_t *existing_dbm, modsec_rec 
     }
 
     /* Remove expired variables. */
+//    if (msr->dcfg1->persistent_garbage == PERSISTENT_GARBAGE_COLLECTOR) {
     do {
         arr = apr_table_elts(col);
         te = (apr_table_entry_t *)arr->elts;
@@ -175,7 +176,7 @@ static apr_table_t *collection_retrieve_ex(apr_sdbm_t *existing_dbm, modsec_rec 
                     if (strcmp(key_to_expire, "__expire_KEY") == 0) {
                         expired = 1;
                     }
-                    
+
                     if (msr->txcfg->debuglog_level >= 9) {
                         msr_log(msr, 9, "collection_retrieve_ex: Removing key \"%s\" from collection.", key_to_expire + 9);
                         msr_log(msr, 9, "collection_retrieve_ex: Removing key \"%s\" from collection.", key_to_expire);
@@ -183,7 +184,7 @@ static apr_table_t *collection_retrieve_ex(apr_sdbm_t *existing_dbm, modsec_rec 
                     
                     apr_table_unset(col, key_to_expire + 9);
                     apr_table_unset(col, key_to_expire);
-                    
+
                     if (msr->txcfg->debuglog_level >= 4) {
                         msr_log(msr, 4, "collection_retrieve_ex: Removed expired variable \"%s\".", key_to_expire + 9);
                     }
@@ -240,6 +241,7 @@ static apr_table_t *collection_retrieve_ex(apr_sdbm_t *existing_dbm, modsec_rec 
         }
         goto cleanup;
     }
+//    }
 
     /* Update UPDATE_RATE */
     {
@@ -625,10 +627,14 @@ int collections_remove_stale(modsec_rec *msr, const char *col_name) {
      * do it as fast as possible.
      */
     rc = apr_sdbm_firstkey(dbm, &key);
-    while(rc == APR_SUCCESS) {
+    while(rc == APR_SUCCESS && key.dptr != NULL) {
         char *s = apr_pstrmemdup(msr->mp, key.dptr, key.dsize - 1);
         *(char **)apr_array_push(keys_arr) = s;
         rc = apr_sdbm_nextkey(dbm, &key);
+        if (rc != APR_SUCCESS) {
+            msr_log(msr, 1, "collections_remove_stale: Failed reading DBM file \"%s\": File is CORRUPTED",
+                log_escape(msr->mp, dbm_filename));
+        }
     }
     apr_sdbm_unlock(dbm);
 

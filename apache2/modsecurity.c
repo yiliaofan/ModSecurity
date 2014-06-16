@@ -223,6 +223,7 @@ static void modsecurity_persist_data(modsec_rec *msr) {
     }
 
     /* Remove stale collections. */
+//  if (msr->dcfg1->persistent_garbage == PERSISTENT_GARBAGE_COLLECTOR) {
     srand(time(NULL));
 
     if (rand() < RAND_MAX/100) {
@@ -239,6 +240,7 @@ static void modsecurity_persist_data(modsec_rec *msr) {
                 " microseconds.", msr->time_gc);
         }
     }
+//  }
 }
 
 /**

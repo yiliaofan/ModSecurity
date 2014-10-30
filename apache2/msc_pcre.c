@@ -139,7 +139,8 @@ void *msc_pregcomp_ex(apr_pool_t *pool, const char *pattern, int options,
 void *msc_pregcomp(apr_pool_t *pool, const char *pattern, int options,
                    const char **_errptr, int *_erroffset)
 {
-    return msc_pregcomp_ex(pool, pattern, options, _errptr, _erroffset, 0, 0);
+    return msc_pregcomp_ex(pool, pattern, options, _errptr, _erroffset, 
+            msc_pcre_match_limit, msc_pcre_match_limit_recursion);
 }
 
 /**

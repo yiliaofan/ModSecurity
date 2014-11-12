@@ -504,6 +504,7 @@ struct directory_config {
 
     /* Whether audit log should be enabled in the context or not */
     int                  auditlog_flag;
+    int 		 auditlog_format;
 
     /* AUDITLOG_SERIAL (single file) or AUDITLOG_CONCURRENT (multiple files) */
     int                  auditlog_type;

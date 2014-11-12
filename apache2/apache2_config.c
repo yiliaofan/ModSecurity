@@ -481,6 +481,8 @@ void *merge_directory_configs(apr_pool_t *mp, void *_parent, void *_child)
     /* audit log variables */
     merged->auditlog_flag = (child->auditlog_flag == NOT_SET
         ? parent->auditlog_flag : child->auditlog_flag);
+    merged->auditlog_format = (child->auditlog_format == NOT_SET
+        ? parent->auditlog_format : child->auditlog_format);
     merged->auditlog_type = (child->auditlog_type == NOT_SET
         ? parent->auditlog_type : child->auditlog_type);
     merged->max_rule_time = (child->max_rule_time == NOT_SET
@@ -1167,6 +1169,20 @@ static const char *cmd_audit_engine(cmd_parms *cmd, void *_dcfg, const char *p1)
                         "ModSecurity: Unrecognised parameter value for SecAuditEngine: %s", p1);
 
     return NULL;
+}
+
+static const char *cmd_audit_log_format(cmd_params *cmd, void *_dcfg, const char *p1)
+{
+    directory_config *dcfg = _dcfg;
+
+    if (strcasecmp(p1, "JSON") == 0)
+    {
+        dcfg->auditlog_format = AUDITLOG_FORMAT_JSON;
+    }
+    else
+    {
+        dcfg->auditlog_format = AUDITLOG_FORMAT_TEXT;
+    }
 }
 
 static const char *cmd_audit_log(cmd_parms *cmd, void *_dcfg, const char *p1)
@@ -3087,6 +3103,14 @@ const command_rec module_directives[] = {
         NULL,
         CMD_SCOPE_ANY,
         "On, Off or RelevantOnly to determine the level of audit logging"
+    ),
+
+    AP_INIT_TAKE1 (
+        "SecAuditLogFormat",
+        cmd_audit_log_format,
+        NULL,
+        CMD_SCOPE_ANY,
+        "TEXT or XML"
     ),
 
     AP_INIT_TAKE1 (

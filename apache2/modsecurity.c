@@ -33,7 +33,10 @@ int DSOLOCAL *unicode_map_table = NULL;
 const char * msc_alert_message(modsec_rec *msr, msre_actionset *actionset, const char *action_message,
     const char *rule_message)
 {
+    //FIXME: very if we should log xml-like or text.
+#if 0
     const char *message = NULL;
+
 
     if (rule_message == NULL) rule_message = "Unknown error.";
 
@@ -47,6 +50,23 @@ const char * msc_alert_message(modsec_rec *msr, msre_actionset *actionset, const
     }
 
     return message;
+#endif
+    yajl_gen gen;
+    const unsigned char * buf;
+    size_t len;
+    yajl_gen_get_buf(gen, &buf, &len);
+
+    gen = yajl_gen_alloc (NULL);
+
+    if (action_message != NULL) {
+        yajl_gen_string(gen, "Actionset Message", strlen("Actionset Message"));
+        yajl_gen_string(gen, action_message, strlen(action_message));
+    }
+
+    yajl_gen_string(gen, "Rule Message", strlen("Rule Message"));
+    yajl_gen_string(gen, "Actionset Data", strlen("Actionset Data"));
+
+    return buf;
 }
 
 /**
